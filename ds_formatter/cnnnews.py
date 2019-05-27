@@ -1,4 +1,5 @@
 import util as UTIL
+from tqdm import tqdm
 
 def parse_answer_token_ranges(answer_token_ranges):
     if answer_token_ranges == '':
@@ -38,12 +39,14 @@ def convert_to_squad(question_answer_content, context_content_path):
     stories_gb = question_answer_content.groupby('story_id')
     # Columns: story_id, story_text, question, answer_token_ranges
     # skip answers with multiple ranges
+    pbar = tqdm(total=question_answer_content.size)
     for story in stories_gb:
         qas = []
         paragraphs = []
         context = None
         # story[0] is the header, [1] contains the values
         for index, row in story[1].iterrows():
+            pbar.update(1)
             ranges = parse_answer_token_ranges(row[3])
             if len(ranges) != 1:
                 continue
