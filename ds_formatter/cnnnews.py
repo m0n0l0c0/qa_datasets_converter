@@ -15,7 +15,10 @@ def anwer_range_to_span_index(context, ranges):
     the characters index.
     """
     context_tokens = UTIL.word_tokenize(context)
-    return len(' '.join(context_tokens[:ranges[0]])) +1
+    span_text = ' '.join(context_tokens[ranges[0]:ranges[1]])
+    span_start = len(' '.join(context_tokens[:ranges[0]])) +1
+    span_end = span_start + len(span_text)
+    return span_start, span_end
 
 def convert_to_squad(question_answer_content, context_content_path):
     """
@@ -42,12 +45,12 @@ def convert_to_squad(question_answer_content, context_content_path):
         # story[0] is the header, [1] contains the values
         for index, row in story[1].iterrows():
             ranges = parse_answer_token_ranges(row[3])
-            if len(ranges) == 1:
+            if len(ranges) != 1:
                 continue
-            ranges = ranges[0]
             if not context:
                 context = row[1].replace("''", '" ').replace("``", '" ')
 
+            ranges = anwer_range_to_span_index(row[1], ranges[0])
             story_file_name = row[0][(row[0].rindex('/') + 1):] + '_' + str(index)
 
             # SQuAD 2.0 "is_impossible" field
@@ -55,24 +58,25 @@ def convert_to_squad(question_answer_content, context_content_path):
             qas_ELEMENT = dict({
                 'id': story_file_name,
                 'question': row[2].replace("''", '" ').replace("``", '" '),
-                'is_impossible': False
+                'is_impossible': False,
                 'answers': [{
                     'text': context[ranges[0]:ranges[1]],
-                    'answer_start': anwer_range_to_span_index(context, ranges)
+                    'answer_start': ranges[0]
                 }]
             })
 
             qas.append(qas_ELEMENT)
 
-        paragraphs.append(dict({
-            'context': context,
-            'qas': qas
-        }))
+        if context is not None and len(qas) > 0:
+            paragraphs.append(dict({
+                'context': context,
+                'qas': qas
+            }))
 
-        data.append(dict({
-            'title': 'dummyTitle',
-            'paragraphs': paragraphs
-        }))
+            data.append(dict({
+                'title': 'dummyTitle',
+                'paragraphs': paragraphs
+            }))
 
     squad_formatted_content['data'] = data
 
