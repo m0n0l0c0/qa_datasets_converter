@@ -1,3 +1,22 @@
+import util as UTIL
+
+def parse_answer_token_ranges(answer_token_ranges):
+    if answer_token_ranges == '':
+        return [[]]
+    return [[int(a) for a in b.split(':')] for b in answer_token_ranges.split(',')]
+
+def anwer_range_to_span_index(context, ranges):
+    """
+    :param context: The context from the story, containing the answer
+    :param answer_token_ranges: The index ranges mapping to the part of the context containg
+                                the answer. It is a string, parsing needed
+    :return: index pointing to the part of the context where the answer span starts.
+    NewsQA stores the ranges as indexes over the tokenized context, SQuAD does it over 
+    the characters index.
+    """
+    context_tokens = UTIL.word_tokenize(context)
+    return len(' '.join(context_tokens[:ranges[0]])) +1
+
 def convert_to_squad(question_answer_content, context_content_path):
     """
     :param question_answer_content:
@@ -12,44 +31,45 @@ def convert_to_squad(question_answer_content, context_content_path):
     squad_formatted_content = dict()
     squad_formatted_content['version'] = 'cnnnews_squad_format'
     data = []
-    #TODO: Each context has multiple questions and each row of the file has multiple questions in different columns (like every 4 columns), we need to handle this.
-    for datum in question_answer_content.itertuples(index=False):
-        # Format is deeply nested JSON -- prepare data structures
-        if datum[3] > 0 : #(part) answer absent, skip this question
-            continue
-
-        data_ELEMENT = dict()
-        data_ELEMENT['title'] = 'dummyTitle'
-        paragraphs = []
-        paragraphs_ELEMENT = dict()
+    # group by story id (same context various questions)
+    stories_gb = question_answer_content.groupby('story_id')
+    # Columns: story_id, story_text, question, answer_token_ranges
+    # skip answers with multiple ranges
+    for story in stories_gb:
         qas = []
-        qas_ELEMENT = dict()
-        qas_ELEMENT_ANSWERS = []
-        ANSWERS_ELEMENT = dict()
+        paragraphs = []
+        context = None
+        # story[0] is the header, [1] contains the values
+        for index, row in story[1].iterrows():
+            ranges = parse_answer_token_ranges(row[3])
+            if len(ranges) == 1:
+                continue
+            ranges = ranges[0]
+            if not context:
+                context = row[1].replace("''", '" ').replace("``", '" ')
 
-        story_file_name = datum[0][(datum[0].rindex('/') + 1):]
-        qas_ELEMENT['id'] = story_file_name
-        qas_ELEMENT['question'] = datum[1]
+            story_file_name = row[0][(row[0].rindex('/') + 1):] + '_' + str(index)
 
-        story_file_path = context_content_path + os.sep + story_file_name
-        if not os.path.isfile(story_file_path):
-            raise TypeError(story_file_path + " does not exist")
-        superdocument = open(story_file_path).read()
+            qas_ELEMENT = dict({
+                'id': story_file_name,
+                'question': row[2].replace("''", '" ').replace("``", '" '),
+                'answers': [{
+                    'text': context[ranges[0]:ranges[1]],
+                    'answer_start': anwer_range_to_span_index(context, ranges)
+                }]
+            })
 
-        ANSWERS_ELEMENT['answer_start'] = -1
-        ANSWERS_ELEMENT['text'] = 'dummyAnswer'
+            qas.append(qas_ELEMENT)
 
-        paragraphs_ELEMENT['context'] = superdocument
-        qas_ELEMENT_ANSWERS.append(ANSWERS_ELEMENT)
+        paragraphs.append(dict({
+            'context': context,
+            'qas': qas
+        }))
 
-        qas_ELEMENT['answers'] = qas_ELEMENT_ANSWERS
-        qas.append(qas_ELEMENT)
-
-        paragraphs_ELEMENT['qas'] = qas
-        paragraphs.append(paragraphs_ELEMENT)
-
-        data_ELEMENT['paragraphs'] = paragraphs
-        data.append(data_ELEMENT)
+        data.append(dict({
+            'title': 'dummyTitle',
+            'paragraphs': paragraphs
+        }))
 
     squad_formatted_content['data'] = data
 
