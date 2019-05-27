@@ -50,9 +50,12 @@ def convert_to_squad(question_answer_content, context_content_path):
 
             story_file_name = row[0][(row[0].rindex('/') + 1):] + '_' + str(index)
 
+            # SQuAD 2.0 "is_impossible" field
+            # TODO := How does unanswerable questions look like in newsqa?
             qas_ELEMENT = dict({
                 'id': story_file_name,
                 'question': row[2].replace("''", '" ').replace("``", '" '),
+                'is_impossible': False
                 'answers': [{
                     'text': context[ranges[0]:ranges[1]],
                     'answer_start': anwer_range_to_span_index(context, ranges)
